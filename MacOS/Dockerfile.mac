@@ -55,26 +55,42 @@ RUN apt-get update && apt-get install -y \
     snapd \
  && rm -rf /var/lib/apt/lists/*
 
-# Install Google Chrome (more reliable than chromium-browser in containers)
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable && \
-    rm -rf /var/lib/apt/lists/*
-
-# Also install chromium as backup
+# Install browsers - handle both ARM64 and AMD64 architectures
 RUN apt-get update && \
-    apt-get install -y chromium-browser && \
+    apt-get install -y chromium-browser firefox-esr && \
     rm -rf /var/lib/apt/lists/*
 
-# Create comprehensive browser symlinks - CRITICAL: Multiple browser aliases
-RUN ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome && \
-    ln -sf /usr/bin/google-chrome-stable /usr/bin/chrome && \
-    ln -sf /usr/bin/google-chrome-stable /usr/bin/browser && \
-    ln -sf /usr/bin/google-chrome-stable /usr/bin/firefox && \
-    ln -sf /usr/bin/google-chrome-stable /usr/local/bin/browser && \
-    ln -sf /usr/bin/google-chrome-stable /usr/local/bin/chrome && \
-    ln -sf /usr/bin/google-chrome-stable /usr/local/bin/google-chrome
+# Try to install Google Chrome if on AMD64, fallback to Chromium on ARM64
+RUN ARCH=$(dpkg --print-architecture) && \
+    echo "Architecture detected: $ARCH" && \
+    if [ "$ARCH" = "amd64" ]; then \
+        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+        apt-get update && \
+        apt-get install -y google-chrome-stable && \
+        rm -rf /var/lib/apt/lists/* && \
+        PREFERRED_BROWSER="/usr/bin/google-chrome-stable"; \
+    else \
+        echo "ARM64 detected, using Chromium as primary browser" && \
+        PREFERRED_BROWSER="/usr/bin/chromium-browser"; \
+    fi
+
+# Create comprehensive browser symlinks for both Chrome and Chromium
+RUN if [ -f "/usr/bin/google-chrome-stable" ]; then \
+        ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome && \
+        ln -sf /usr/bin/google-chrome-stable /usr/bin/chrome && \
+        ln -sf /usr/bin/google-chrome-stable /usr/bin/browser && \
+        ln -sf /usr/bin/google-chrome-stable /usr/local/bin/browser && \
+        ln -sf /usr/bin/google-chrome-stable /usr/local/bin/chrome; \
+    else \
+        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome && \
+        ln -sf /usr/bin/chromium-browser /usr/bin/chrome && \
+        ln -sf /usr/bin/chromium-browser /usr/bin/browser && \
+        ln -sf /usr/bin/chromium-browser /usr/local/bin/browser && \
+        ln -sf /usr/bin/chromium-browser /usr/local/bin/chrome && \
+        ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome-stable; \
+    fi && \
+    ln -sf /usr/bin/chromium-browser /usr/bin/firefox
 
 # Set up locale
 RUN apt-get update && apt-get install -y locales && \

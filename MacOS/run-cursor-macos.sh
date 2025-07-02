@@ -92,10 +92,10 @@ docker run -it --rm \
     -e ELECTRON_DISABLE_GPU=false \
     -e XDG_CURRENT_DESKTOP=Unity \
     -e XDG_SESSION_TYPE=x11 \
-    -e BROWSER="/usr/bin/google-chrome-stable" \
-    -e CHROME_PATH="/usr/bin/google-chrome-stable" \
-    -e ELECTRON_DEFAULT_BROWSER="/usr/bin/google-chrome-stable" \
-    -e DEFAULT_BROWSER="/usr/bin/google-chrome-stable" \
+    -e BROWSER="/usr/bin/chromium-browser" \
+    -e CHROME_PATH="/usr/bin/chromium-browser" \
+    -e ELECTRON_DEFAULT_BROWSER="/usr/bin/chromium-browser" \
+    -e DEFAULT_BROWSER="/usr/bin/chromium-browser" \
     -e ELECTRON_ENABLE_LOGGING=1 \
     -e DEBUG_COLORS=true \
     -v cursor_app_data_mac:/home/cursoruser/.cursor \
