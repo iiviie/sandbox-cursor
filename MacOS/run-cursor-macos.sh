@@ -5,16 +5,16 @@ mkdir -p ~/cursor-projects
 
 # Check if Docker is running
 if ! docker info >/dev/null 2>&1; then
-  echo "Docker is not running. Please start Docker Desktop and try again."
-  exit 1
+    echo "Docker is not running. Please start Docker Desktop and try again."
+    exit 1
 fi
 
 # Check if Cursor.AppImage exists
 if [ ! -f "Cursor.AppImage" ]; then
-  echo "Cursor.AppImage not found in the current directory."
-  echo "Please download Cursor AppImage from https://cursor.sh/"
-  echo "and place it in the same directory as this script."
-  exit 1
+    echo "Cursor.AppImage not found in the current directory."
+    echo "Please download Cursor AppImage from https://cursor.sh/"
+    echo "and place it in the same directory as this script."
+    exit 1
 fi
 
 # Check if XQuartz is installed
@@ -65,8 +65,8 @@ SOCAT_PID=$!
 trap "kill $SOCAT_PID 2>/dev/null || true; xhost - 2>/dev/null || true; echo 'Cleaned up X11 forwarding.'" EXIT
 
 # Build the Docker image
-echo "Building Cursor container image..."
-docker build -t cursor-firefox-mac -f Dockerfile.mac .
+echo "Building Cursor container image with enhanced browser support..."
+docker build -t cursor-chrome-mac -f Dockerfile.mac .
 
 # Check if build was successful
 if [ $? -ne 0 ]; then
@@ -80,19 +80,32 @@ docker volume create cursor_app_data_mac
 docker volume create cursor_config_data_mac
 docker volume create firefox_profile_data_mac
 
-# Run using socat for display forwarding
-echo "Starting Cursor container..."
+# Run using socat for display forwarding with enhanced browser environment
+echo "Starting Cursor container with enhanced browser configuration..."
 docker run -it --rm \
-  --name cursor-instance-mac \
-  --hostname cursor-container-mac \
-  -e DISPLAY=host.docker.internal:0 \
-  -v cursor_app_data_mac:/home/cursoruser/.cursor \
-  -v cursor_config_data_mac:/home/cursoruser/.config/Cursor \
-  -v firefox_profile_data_mac:/home/cursoruser/.mozilla/firefox \
-  -v ~/cursor-projects:/home/cursoruser/projects \
-  -v ~/Documents:/home/cursoruser/host-documents \
-  -v ~/Downloads:/home/cursoruser/host-downloads \
-  --cap-add SYS_ADMIN \
-  cursor-firefox-mac
+    --name cursor-instance-mac \
+    --hostname cursor-container-mac \
+    -e DISPLAY=host.docker.internal:0 \
+    --shm-size=2g \
+    --memory=4g \
+    -e ELECTRON_DISABLE_GPU_SANDBOX=true \
+    -e ELECTRON_DISABLE_GPU=false \
+    -e XDG_CURRENT_DESKTOP=Unity \
+    -e XDG_SESSION_TYPE=x11 \
+    -e BROWSER="/usr/bin/chromium-browser" \
+    -e CHROME_PATH="/usr/bin/chromium-browser" \
+    -e ELECTRON_DEFAULT_BROWSER="/usr/bin/chromium-browser" \
+    -e DEFAULT_BROWSER="/usr/bin/chromium-browser" \
+    -e ELECTRON_ENABLE_LOGGING=1 \
+    -e DEBUG_COLORS=true \
+    -v cursor_app_data_mac:/home/cursoruser/.cursor \
+    -v cursor_config_data_mac:/home/cursoruser/.config/Cursor \
+    -v firefox_profile_data_mac:/home/cursoruser/.mozilla \
+    -v ~/cursor-projects:/home/cursoruser/projects \
+    -v ~/Documents:/home/cursoruser/host-documents \
+    -v ~/Downloads:/home/cursoruser/host-downloads \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    cursor-chrome-mac
 
 echo "Cursor container has been shut down."

@@ -42,11 +42,31 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     libfuse2 \
     dbus \
+    libxss1 \
+    libgconf-2-4 \
+    libxtst6 \
+    libxrandr2 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libatk1.0-0 \
+    libcairo-gobject2 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    snapd \
  && rm -rf /var/lib/apt/lists/*
 
-# Install Firefox
-RUN apt-get update && apt-get install -y firefox && \
+# Install Chromium as primary browser (more reliable than Firefox snap in containers)
+RUN apt-get update && \
+    apt-get install -y chromium-browser && \
     rm -rf /var/lib/apt/lists/*
+
+# Create symlinks for browser compatibility - CRITICAL: Multiple browser aliases
+RUN ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome && \
+    ln -sf /usr/bin/chromium-browser /usr/bin/firefox && \
+    ln -sf /usr/bin/chromium-browser /usr/bin/chrome && \
+    ln -sf /usr/bin/chromium-browser /usr/bin/browser && \
+    ln -sf /usr/bin/chromium-browser /usr/local/bin/browser && \
+    ln -sf /usr/bin/chromium-browser /usr/local/bin/chrome
 
 # Set up locale
 RUN apt-get update && apt-get install -y locales && \
@@ -78,7 +98,8 @@ RUN mkdir -p /home/cursoruser/.cursor && \
     chown -R cursoruser:cursoruser /home/cursoruser/.cursor && \
     chown -R cursoruser:cursoruser /home/cursoruser/.mozilla && \
     chmod -R 755 /home/cursoruser/.cursor && \
-    chmod -R 755 /home/cursoruser/.config/Cursor
+    chmod -R 755 /home/cursoruser/.config/Cursor && \
+    chmod -R 755 /home/cursoruser/.mozilla
 
 # Set work directory for that user
 USER cursoruser
@@ -91,20 +112,15 @@ RUN echo 'export PS1="\[\033[01;32m\]\u@cursor-container-mac\[\033[00m\]:\[\033[
 COPY --chown=cursoruser:cursoruser Cursor.AppImage ./Cursor.AppImage
 RUN chmod +x Cursor.AppImage
 
-# Create startup script
+# Create startup script with enhanced browser support
 RUN echo '#!/bin/bash\n\
 # Ensure permissions are correct at startup\n\
 sudo chown -R cursoruser:cursoruser /home/cursoruser/.cursor\n\
 sudo chown -R cursoruser:cursoruser /home/cursoruser/.config/Cursor\n\
+sudo chown -R cursoruser:cursoruser /home/cursoruser/.mozilla\n\
 sudo chmod -R 755 /home/cursoruser/.cursor\n\
 sudo chmod -R 755 /home/cursoruser/.config/Cursor\n\
-\n\
-# Start Firefox process in the background if needed\n\
-start_firefox() {\n\
-  echo "Starting Firefox for authentication..."\n\
-  /usr/bin/firefox --new-instance --private-window & \n\
-  return $!\n\
-}\n\
+sudo chmod -R 755 /home/cursoruser/.mozilla\n\
 \n\
 # Start DBus if not running\n\
 if [ ! -e /var/run/dbus/system_bus_socket ]; then\n\
@@ -112,6 +128,40 @@ if [ ! -e /var/run/dbus/system_bus_socket ]; then\n\
   sudo mkdir -p /var/run/dbus\n\
   sudo dbus-daemon --system --fork\n\
 fi\n\
+\n\
+# Create xdg-open wrapper that forces browser usage\n\
+echo "#!/bin/bash" > /home/cursoruser/custom-xdg-open\n\
+echo "if [[ \$1 =~ ^https?:// ]]; then" >> /home/cursoruser/custom-xdg-open\n\
+echo "  /usr/bin/chromium-browser --no-sandbox --disable-dev-shm-usage \"\$1\" &" >> /home/cursoruser/custom-xdg-open\n\
+echo "else" >> /home/cursoruser/custom-xdg-open\n\
+echo "  /usr/bin/xdg-open \"\$1\"" >> /home/cursoruser/custom-xdg-open\n\
+echo "fi" >> /home/cursoruser/custom-xdg-open\n\
+chmod +x /home/cursoruser/custom-xdg-open\n\
+\n\
+# Set browser environment for electron apps\n\
+export BROWSER="/usr/bin/chromium-browser"\n\
+export CHROME_PATH="/usr/bin/chromium-browser"\n\
+export ELECTRON_DEFAULT_BROWSER="/usr/bin/chromium-browser"\n\
+export DEFAULT_BROWSER="/usr/bin/chromium-browser"\n\
+\n\
+# Override xdg-open temporarily for browser detection\n\
+export PATH="/home/cursoruser:$PATH"\n\
+ln -sf /home/cursoruser/custom-xdg-open /home/cursoruser/xdg-open\n\
+\n\
+# Test browser availability\n\
+echo "Testing browser availability..."\n\
+chromium-browser --version\n\
+\n\
+# Start Chromium browser in background with remote debugging\n\
+echo "Starting Chromium browser daemon..."\n\
+chromium-browser --no-sandbox --disable-dev-shm-usage --disable-gpu-sandbox \\\n\
+  --remote-debugging-port=9222 --user-data-dir=/tmp/chromium-profile \\\n\
+  --disable-web-security --disable-features=VizDisplayCompositor \\\n\
+  --enable-logging --log-level=0 &\n\
+BROWSER_PID=$!\n\
+\n\
+# Wait for browser to initialize\n\
+sleep 5\n\
 \n\
 # Extract AppImage at runtime\n\
 echo "Extracting Cursor AppImage..."\n\
@@ -121,16 +171,30 @@ mv squashfs-root/* ./CursorExtracted/\n\
 rm -rf squashfs-root\n\
 chmod +x ./CursorExtracted/AppRun\n\
 \n\
-# Start Cursor\n\
-echo "Starting Cursor..."\n\
-cd ./CursorExtracted && ./AppRun --no-sandbox\n\
+# Start Cursor with browser environment variables\n\
+echo "Starting Cursor with browser configuration..."\n\
+cd ./CursorExtracted && \\\n\
+BROWSER="/usr/bin/chromium-browser" \\\n\
+CHROME_PATH="/usr/bin/chromium-browser" \\\n\
+ELECTRON_DEFAULT_BROWSER="/usr/bin/chromium-browser" \\\n\
+DEFAULT_BROWSER="/usr/bin/chromium-browser" \\\n\
+./AppRun --no-sandbox --disable-dev-shm-usage --disable-gpu-sandbox \\\n\
+  --enable-logging --log-level=0\n\
+\n\
+# Clean up browser process when cursor exits\n\
+kill $BROWSER_PID 2>/dev/null || true\n\
 ' > /home/cursoruser/start-cursor.sh && chmod +x /home/cursoruser/start-cursor.sh
 
-# Setup environment variables for browser handling
-ENV BROWSER="/usr/bin/firefox"
+# Setup comprehensive browser environment variables
+ENV BROWSER="/usr/bin/chromium-browser"
+ENV CHROME_PATH="/usr/bin/chromium-browser"
+ENV ELECTRON_DEFAULT_BROWSER="/usr/bin/chromium-browser"
+ENV DEFAULT_BROWSER="/usr/bin/chromium-browser"
 ENV ELECTRON_DEFAULT_ERROR_MODE=1
 ENV ELECTRON_ENABLE_LOGGING=1
 ENV LIBGL_ALWAYS_INDIRECT=1
+ENV XDG_CURRENT_DESKTOP=Unity
+ENV XDG_SESSION_TYPE=x11
 
 # Default command
 CMD ["/home/cursoruser/start-cursor.sh"]
