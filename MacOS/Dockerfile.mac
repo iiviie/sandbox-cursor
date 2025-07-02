@@ -55,18 +55,26 @@ RUN apt-get update && apt-get install -y \
     snapd \
  && rm -rf /var/lib/apt/lists/*
 
-# Install Chromium as primary browser (more reliable than Firefox snap in containers)
+# Install Google Chrome (more reliable than chromium-browser in containers)
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && \
+    apt-get install -y google-chrome-stable && \
+    rm -rf /var/lib/apt/lists/*
+
+# Also install chromium as backup
 RUN apt-get update && \
     apt-get install -y chromium-browser && \
     rm -rf /var/lib/apt/lists/*
 
-# Create symlinks for browser compatibility - CRITICAL: Multiple browser aliases
-RUN ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome && \
-    ln -sf /usr/bin/chromium-browser /usr/bin/firefox && \
-    ln -sf /usr/bin/chromium-browser /usr/bin/chrome && \
-    ln -sf /usr/bin/chromium-browser /usr/bin/browser && \
-    ln -sf /usr/bin/chromium-browser /usr/local/bin/browser && \
-    ln -sf /usr/bin/chromium-browser /usr/local/bin/chrome
+# Create comprehensive browser symlinks - CRITICAL: Multiple browser aliases
+RUN ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome && \
+    ln -sf /usr/bin/google-chrome-stable /usr/bin/chrome && \
+    ln -sf /usr/bin/google-chrome-stable /usr/bin/browser && \
+    ln -sf /usr/bin/google-chrome-stable /usr/bin/firefox && \
+    ln -sf /usr/bin/google-chrome-stable /usr/local/bin/browser && \
+    ln -sf /usr/bin/google-chrome-stable /usr/local/bin/chrome && \
+    ln -sf /usr/bin/google-chrome-stable /usr/local/bin/google-chrome
 
 # Set up locale
 RUN apt-get update && apt-get install -y locales && \
